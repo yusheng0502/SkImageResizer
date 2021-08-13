@@ -60,30 +60,22 @@ namespace SkImageResizer
             var allTasks = new List<Task>();
             var allResult = new List<ResizeResult>();
 
-            for (var index = 0; index < allFiles.Count; index++)
+            foreach (string filePath in allFiles)
             {
-                var filePath = allFiles[index];
-                int index1 = index;
-                allTasks.Add(Task.Run(async () =>
+                string path = filePath;
+                allTasks.Add(Task.Run(() =>
                 {
-                    Console.WriteLine($"Start resize [{index1}]");
-                    var resizeResult = await Task.Run(() => DoResize(scale, filePath));
-                    Console.WriteLine($"Complete resize [{index1}]");
-
-                    Console.WriteLine($"Start save [{index1}]");
-                    await SaveFileAsync(destPath, resizeResult.ImgName, resizeResult.Data);
-                    Console.WriteLine($"Complete save [{index1}]");
+                    var resizeResult = DoResize(scale, path);
+                    allResult.Add(resizeResult);
                 }));
             }
 
             await Task.WhenAll(allTasks);
 
-            //while (allResult.Count > 0)
-            //{
-            //    Console.WriteLine($"Start save [{allResult[0].ImgName}]");
-            //    Console.WriteLine($"Complete save [{allResult[0].ImgName}]");
-            //    allResult.RemoveAt(0);
-            //}
+            foreach (var resizeResult in allResult)
+            {
+                SaveFile(destPath, resizeResult.ImgName, resizeResult.Data);
+            }
         }
 
         private ResizeResult DoResize(double scale, string filePath)
@@ -109,13 +101,15 @@ namespace SkImageResizer
             return resizeResult;
         }
 
+        private void SaveFile(string destPath, string? imgName, SKData data)
+        {
+            using var s = File.OpenWrite(Path.Combine(destPath, imgName + ".jpg"));
+            data.SaveTo(s);
+        }
+
         private Task SaveFileAsync(string destPath, string? imgName, SKData data)
         {
-            return Task.Run(() =>
-            {
-                using var s = File.OpenWrite(Path.Combine(destPath, imgName + ".jpg"));
-                data.SaveTo(s);
-            });
+            return Task.Run(() => { SaveFile(destPath, imgName, data); });
         }
 
         /// <summary>
