@@ -33,8 +33,8 @@ namespace SkImageResizer
                 var sourceWidth = imgPhoto.Width;
                 var sourceHeight = imgPhoto.Height;
 
-                var destinationWidth = (int)(sourceWidth * scale);
-                var destinationHeight = (int)(sourceHeight * scale);
+                var destinationWidth = (int) (sourceWidth * scale);
+                var destinationHeight = (int) (sourceHeight * scale);
 
                 using var scaledBitmap = bitmap.Resize(
                     new SKImageInfo(destinationWidth, destinationHeight),
@@ -56,26 +56,66 @@ namespace SkImageResizer
             await Task.Yield();
 
             var allFiles = FindImages(sourcePath);
-            foreach (var filePath in allFiles)
+
+            var allTasks = new List<Task>();
+            var allResult = new List<ResizeResult>();
+
+            for (var index = 0; index < allFiles.Count; index++)
             {
-                var bitmap = SKBitmap.Decode(filePath);
-                var imgPhoto = SKImage.FromBitmap(bitmap);
-                var imgName = Path.GetFileNameWithoutExtension(filePath);
+                var filePath = allFiles[index];
+                int index1 = index;
+                allTasks.Add(Task.Run(async () =>
+                {
+                    Console.WriteLine($"Start resize [{index1}]");
+                    var resizeResult = await Task.Run(() => DoResize(scale, filePath));
+                    Console.WriteLine($"Complete resize [{index1}]");
 
-                var sourceWidth = imgPhoto.Width;
-                var sourceHeight = imgPhoto.Height;
+                    Console.WriteLine($"Start save [{index1}]");
+                    await SaveFileAsync(destPath, resizeResult.ImgName, resizeResult.Data);
+                    Console.WriteLine($"Complete save [{index1}]");
+                }));
+            }
 
-                var destinationWidth = (int)(sourceWidth * scale);
-                var destinationHeight = (int)(sourceHeight * scale);
+            await Task.WhenAll(allTasks);
 
-                using var scaledBitmap = bitmap.Resize(
-                    new SKImageInfo(destinationWidth, destinationHeight),
-                    SKFilterQuality.High);
-                using var scaledImage = SKImage.FromBitmap(scaledBitmap);
-                using var data = scaledImage.Encode(SKEncodedImageFormat.Jpeg, 100);
+            //while (allResult.Count > 0)
+            //{
+            //    Console.WriteLine($"Start save [{allResult[0].ImgName}]");
+            //    Console.WriteLine($"Complete save [{allResult[0].ImgName}]");
+            //    allResult.RemoveAt(0);
+            //}
+        }
+
+        private ResizeResult DoResize(double scale, string filePath)
+        {
+            var resizeResult = new ResizeResult();
+
+            var bitmap = SKBitmap.Decode(filePath);
+            var imgPhoto = SKImage.FromBitmap(bitmap);
+            resizeResult.ImgName = Path.GetFileNameWithoutExtension(filePath);
+
+            var sourceWidth = imgPhoto.Width;
+            var sourceHeight = imgPhoto.Height;
+
+            var destinationWidth = (int) (sourceWidth * scale);
+            var destinationHeight = (int) (sourceHeight * scale);
+
+            using var scaledBitmap = bitmap.Resize(
+                new SKImageInfo(destinationWidth, destinationHeight),
+                SKFilterQuality.High);
+
+            using var scaledImage = SKImage.FromBitmap(scaledBitmap);
+            resizeResult.Data = scaledImage.Encode(SKEncodedImageFormat.Jpeg, 100);
+            return resizeResult;
+        }
+
+        private Task SaveFileAsync(string destPath, string? imgName, SKData data)
+        {
+            return Task.Run(() =>
+            {
                 using var s = File.OpenWrite(Path.Combine(destPath, imgName + ".jpg"));
                 data.SaveTo(s);
-            }
+            });
         }
 
         /// <summary>
@@ -112,5 +152,11 @@ namespace SkImageResizer
             files.AddRange(Directory.GetFiles(srcPath, "*.jpeg", SearchOption.AllDirectories));
             return files;
         }
+    }
+
+    internal class ResizeResult
+    {
+        public string? ImgName { get; set; }
+        public SKData Data { get; set; }
     }
 }
